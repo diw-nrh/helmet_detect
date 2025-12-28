@@ -18,9 +18,6 @@ namespace MyFormApp {
 		MyForm(void)
 		{
 			InitializeComponent();
-			//
-			//TODO: Add the constructor code here
-			//
 		}
 
 	protected:
@@ -42,10 +39,6 @@ namespace MyFormApp {
 		System::ComponentModel::Container ^components;
 
 #pragma region Windows Form Designer generated code
-		/// <summary>
-		/// Required method for Designer support - do not modify
-		/// the contents of this method with the code editor.
-		/// </summary>
 		void InitializeComponent(void)
 		{
 			this->SuspendLayout();
