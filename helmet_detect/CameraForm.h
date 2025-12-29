@@ -1,6 +1,9 @@
 ﻿#pragma once
 #include <opencv2/opencv.hpp>
+#include <opencv2/dnn.hpp>
 #include <msclr/marshal_cppstd.h>
+#include <vector>
+#include <string>
 
 namespace helmetdetect {
 
@@ -21,6 +24,9 @@ namespace helmetdetect {
 			capture = nullptr;
 			isStart = false;
 			currentFrame = nullptr;
+
+			// 🔥 เรียกโหลด AI ตอนเริ่มฟอร์ม
+			InitializeAI();
 		}
 
 		// Public method to get current frame
@@ -47,6 +53,8 @@ namespace helmetdetect {
 			if (currentFrame != nullptr) {
 				delete currentFrame;
 			}
+			// 🔥 ล้างสมอง AI
+			if (net != nullptr) delete net;
 		}
 
 	private: System::Windows::Forms::PictureBox^ pictureBox1;
@@ -58,6 +66,13 @@ namespace helmetdetect {
 		cv::VideoCapture* capture;
 		bool isStart;
 		Bitmap^ currentFrame;
+
+		// --- 🔥 ตัวแปรสำหรับ AI (YOLO) ---
+		cv::dnn::Net* net;
+		const float INPUT_WIDTH = 640.0;
+		const float INPUT_HEIGHT = 640.0;
+		const float SCORE_THRESHOLD = 0.5;
+		const float NMS_THRESHOLD = 0.45;
 
 #pragma region Windows Form Designer generated code
 		void InitializeComponent(void)
@@ -102,13 +117,98 @@ namespace helmetdetect {
 			this->Controls->Add(this->StartButton);
 			this->Controls->Add(this->pictureBox1);
 			this->Name = L"cameraForm";
-			this->Text = L"Camera View";
+			this->Text = L"Camera View (YOLO11)";
 			this->FormClosing += gcnew System::Windows::Forms::FormClosingEventHandler(this, &cameraForm::cameraForm_FormClosing);
+			this->Load += gcnew System::EventHandler(this, &cameraForm::cameraForm_Load);
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->EndInit();
 			this->ResumeLayout(false);
 
 		}
 #pragma endregion
+
+		// ============================================
+		// 🔥 ส่วนที่ 1: โหลดโมเดล
+		// ============================================
+	private: void InitializeAI() {
+		try {
+			// ตรวจสอบว่ามีไฟล์ best.onnx อยู่ข้างไฟล์ .exe หรือยัง
+			net = new cv::dnn::Net(cv::dnn::readNetFromONNX("best.onnx"));
+
+			// ถ้ามี GPU ให้เปลี่ยนเป็น CUDA ตรงนี้
+			net->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+			net->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+		}
+		catch (cv::Exception& e) {
+			MessageBox::Show("Error Loading AI: " + gcnew String(e.what()));
+		}
+	}
+
+		   // ============================================
+		   // 🔥 ส่วนที่ 2: ฟังก์ชันตรวจจับ (Logic หลัก)
+		   // ============================================
+	private: void DetectAndDraw(cv::Mat& frame) {
+		if (net == nullptr || net->empty()) return;
+
+		// 1. Prepare Input
+		cv::Mat blob;
+		cv::dnn::blobFromImage(frame, blob, 1.0 / 255.0, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::Scalar(), true, false);
+		net->setInput(blob);
+
+		// 2. Inference
+		std::vector<cv::Mat> outputs;
+		net->forward(outputs, net->getUnconnectedOutLayersNames());
+
+		// 3. Process Output
+		if (outputs.empty()) return;
+		cv::Mat output_data = outputs[0];
+
+		// Reshape [1, 5, 8400] -> [5, 8400] -> Transpose [8400, 5]
+		cv::Mat output_2d = output_data.reshape(1, 5);
+		cv::transpose(output_2d, output_data);
+
+		float* data = (float*)output_data.data;
+		int rows = output_data.rows;
+		int dimensions = output_data.cols; // ควรเป็น 5
+
+		std::vector<float> confidences;
+		std::vector<cv::Rect> boxes;
+
+		float x_factor = (float)frame.cols / INPUT_WIDTH;
+		float y_factor = (float)frame.rows / INPUT_HEIGHT;
+
+		for (int i = 0; i < rows; ++i) {
+			float confidence = data[4]; // Index 4 คือ Score ของ Helmet
+
+			if (confidence >= SCORE_THRESHOLD) {
+				float x = data[0];
+				float y = data[1];
+				float w = data[2];
+				float h = data[3];
+
+				int left = int((x - 0.5 * w) * x_factor);
+				int top = int((y - 0.5 * h) * y_factor);
+				int width = int(w * x_factor);
+				int height = int(h * y_factor);
+
+				boxes.push_back(cv::Rect(left, top, width, height));
+				confidences.push_back(confidence);
+			}
+			data += dimensions;
+		}
+
+		// 4. NMS
+		std::vector<int> nms_result;
+		cv::dnn::NMSBoxes(boxes, confidences, SCORE_THRESHOLD, NMS_THRESHOLD, nms_result);
+
+		// 5. Draw Results
+		for (int idx : nms_result) {
+			cv::Rect box = boxes[idx];
+			cv::rectangle(frame, box, cv::Scalar(0, 255, 0), 2); // สีเขียว
+
+			std::string label = "Helmet: " + std::to_string((int)(confidences[idx] * 100)) + "%";
+			cv::putText(frame, label, cv::Point(box.x, box.y - 10), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+		}
+	}
 
 	private: System::Void StartButton_Click(System::Object^ sender, System::EventArgs^ e) {
 		if (isStart) {
@@ -136,11 +236,6 @@ namespace helmetdetect {
 			return;
 		}
 
-		// Get camera properties
-		int capWidth = (int)capture->get(cv::CAP_PROP_FRAME_WIDTH);
-		int capHeight = (int)capture->get(cv::CAP_PROP_FRAME_HEIGHT);
-		int capFPS = (int)capture->get(cv::CAP_PROP_FPS);
-
 		// Start timer to update frames
 		isStart = true;
 		timer1->Start();
@@ -153,6 +248,10 @@ namespace helmetdetect {
 			*capture >> frame;
 
 			if (!frame.empty()) {
+
+				// 🔥 แทรกตรงนี้: ส่งภาพไปให้ AI ตรวจจับก่อนแสดงผล
+				DetectAndDraw(frame);
+
 				// Convert Mat to Bitmap
 				Bitmap^ bmp = MatToBitmap(frame);
 
@@ -180,38 +279,35 @@ namespace helmetdetect {
 		}
 	}
 
-	// Convert cv::Mat to System::Drawing::Bitmap
+		   // Convert cv::Mat to System::Drawing::Bitmap
 	private: Bitmap^ MatToBitmap(cv::Mat& mat) {
-		// No color conversion needed - Format24bppRgb actually stores BGR in memory
 		cv::Mat temp;
 		if (!mat.isContinuous()) {
 			temp = mat.clone();
-		} else {
+		}
+		else {
 			temp = mat;
 		}
 
-		// Create Bitmap with proper memory management
 		Bitmap^ bitmap = gcnew Bitmap(temp.cols, temp.rows, PixelFormat::Format24bppRgb);
 
-		// Lock bitmap data for writing
 		System::Drawing::Rectangle rect(0, 0, temp.cols, temp.rows);
 		BitmapData^ bmpData = bitmap->LockBits(rect, ImageLockMode::WriteOnly, PixelFormat::Format24bppRgb);
 
-		// Copy pixel data from Mat to Bitmap
 		unsigned char* ptrSrc = temp.data;
 		unsigned char* ptrDst = (unsigned char*)bmpData->Scan0.ToPointer();
 		int srcStride = static_cast<int>(temp.step);
 		int dstStride = bmpData->Stride;
-		int rowSize = temp.cols * 3; // 3 bytes per pixel (BGR)
+		int rowSize = temp.cols * 3;
 
 		for (int y = 0; y < temp.rows; y++) {
 			memcpy(ptrDst + y * dstStride, ptrSrc + y * srcStride, rowSize);
 		}
 
-		// Unlock bitmap
 		bitmap->UnlockBits(bmpData);
-
 		return bitmap;
+	}
+	private: System::Void cameraForm_Load(System::Object^ sender, System::EventArgs^ e) {
 	}
 	};
 }
