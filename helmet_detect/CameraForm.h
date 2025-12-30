@@ -17,6 +17,19 @@ namespace helmetdetect {
 
 	public ref class cameraForm : public System::Windows::Forms::Form
 	{
+	private:
+		// --- เปลี่ยนเป็น Pointer เพื่อแก้ Error E2244 ---
+		std::vector<cv::Rect>* currentBoxes;
+		std::vector<float>* currentConfidences;
+		cv::Mat* currentMatForCapture;
+
+	public:
+		// --- [ประกาศตัวแปรตรงนี้] เพื่อให้ Form อื่น (MyForm) มองเห็น ---
+		bool isNight;
+		bool isNightGreen;
+		double currentClipLimit;
+		float aiConfidence; // <-- เพิ่มตัวแปรนี้ (ค่า 0.0 - 1.0)
+
 	public:
 		cameraForm(void)
 		{
@@ -24,9 +37,24 @@ namespace helmetdetect {
 			capture = nullptr;
 			isStart = false;
 			currentFrame = nullptr;
+			isNight = false;
+			isNightGreen = false;
+			currentClipLimit = 4.0;
+			aiConfidence = 0.5f; // ค่าเริ่มต้น 50%
+			currentBoxes = new std::vector<cv::Rect>();
+			currentConfidences = new std::vector<float>();
+			currentMatForCapture = new cv::Mat();
 
 			// 🔥 เรียกโหลด AI ตอนเริ่มฟอร์ม
 			InitializeAI();
+		}
+
+	public:
+		// ฟังก์ชันสำหรับ CaptureForm เรียกใช้
+		void GetLatestDetectionData(std::vector<cv::Rect>& outBoxes, std::vector<float>& outConfs, cv::Mat& outMat) {
+			if (currentBoxes) outBoxes = *currentBoxes;
+			if (currentConfidences) outConfs = *currentConfidences;
+			if (currentMatForCapture) outMat = currentMatForCapture->clone();
 		}
 
 		// Public method to get current frame
@@ -53,6 +81,10 @@ namespace helmetdetect {
 			if (currentFrame != nullptr) {
 				delete currentFrame;
 			}
+			// --- ล้างหน่วยความจำ ---
+			if (currentBoxes) delete currentBoxes;
+			if (currentConfidences) delete currentConfidences;
+			if (currentMatForCapture) delete currentMatForCapture;
 			// 🔥 ล้างสมอง AI
 			if (net != nullptr) delete net;
 		}
@@ -61,7 +93,6 @@ namespace helmetdetect {
 	private: System::Windows::Forms::Button^ StartButton;
 	private: System::Windows::Forms::Timer^ timer1;
 	private: System::ComponentModel::IContainer^ components;
-
 	private:
 		cv::VideoCapture* capture;
 		bool isStart;
@@ -93,6 +124,7 @@ namespace helmetdetect {
 			this->pictureBox1->SizeMode = System::Windows::Forms::PictureBoxSizeMode::Zoom;
 			this->pictureBox1->TabIndex = 0;
 			this->pictureBox1->TabStop = false;
+			this->pictureBox1->Click += gcnew System::EventHandler(this, &cameraForm::pictureBox1_Click);
 			// 
 			// StartButton
 			// 
@@ -136,7 +168,9 @@ namespace helmetdetect {
 
 			// ถ้ามี GPU ให้เปลี่ยนเป็น CUDA ตรงนี้
 			net->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-			net->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+			//net->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+			net->setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+
 		}
 		catch (cv::Exception& e) {
 			MessageBox::Show("Error Loading AI: " + gcnew String(e.what()));
@@ -146,67 +180,67 @@ namespace helmetdetect {
 		   // ============================================
 		   // 🔥 ส่วนที่ 2: ฟังก์ชันตรวจจับ (Logic หลัก)
 		   // ============================================
-	private: void DetectAndDraw(cv::Mat& frame) {
+
+	private: void DetectAndDraw(cv::Mat& frameForAI, cv::Mat& frameForDisplay) {
 		if (net == nullptr || net->empty()) return;
 
-		// 1. Prepare Input
+		// --- 1. ส่วนการตรวจจับ (ใช้ frameForAI เสมอ) ---
 		cv::Mat blob;
-		cv::dnn::blobFromImage(frame, blob, 1.0 / 255.0, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::Scalar(), true, false);
+		// ส่งภาพที่ดึงแสงแล้ว (แต่ไม่มี Noise) ให้ AI
+		cv::dnn::blobFromImage(frameForAI, blob, 1.0 / 255.0, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::Scalar(), true, false);
 		net->setInput(blob);
 
-		// 2. Inference
 		std::vector<cv::Mat> outputs;
 		net->forward(outputs, net->getUnconnectedOutLayersNames());
-
-		// 3. Process Output
 		if (outputs.empty()) return;
-		cv::Mat output_data = outputs[0];
 
-		// Reshape [1, 5, 8400] -> [5, 8400] -> Transpose [8400, 5]
+		cv::Mat output_data = outputs[0];
 		cv::Mat output_2d = output_data.reshape(1, 5);
 		cv::transpose(output_2d, output_data);
 
 		float* data = (float*)output_data.data;
 		int rows = output_data.rows;
-		int dimensions = output_data.cols; // ควรเป็น 5
+		int dimensions = output_data.cols;
 
 		std::vector<float> confidences;
 		std::vector<cv::Rect> boxes;
-
-		float x_factor = (float)frame.cols / INPUT_WIDTH;
-		float y_factor = (float)frame.rows / INPUT_HEIGHT;
+		float x_factor = (float)frameForAI.cols / INPUT_WIDTH;
+		float y_factor = (float)frameForAI.rows / INPUT_HEIGHT;
 
 		for (int i = 0; i < rows; ++i) {
-			float confidence = data[4]; // Index 4 คือ Score ของ Helmet
-
-			if (confidence >= SCORE_THRESHOLD) {
-				float x = data[0];
-				float y = data[1];
-				float w = data[2];
-				float h = data[3];
-
+			float confidence = data[4];
+			if (confidence >= aiConfidence) {
+				float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
 				int left = int((x - 0.5 * w) * x_factor);
 				int top = int((y - 0.5 * h) * y_factor);
 				int width = int(w * x_factor);
 				int height = int(h * y_factor);
-
 				boxes.push_back(cv::Rect(left, top, width, height));
 				confidences.push_back(confidence);
 			}
 			data += dimensions;
 		}
 
-		// 4. NMS
 		std::vector<int> nms_result;
-		cv::dnn::NMSBoxes(boxes, confidences, SCORE_THRESHOLD, NMS_THRESHOLD, nms_result);
+		cv::dnn::NMSBoxes(boxes, confidences, aiConfidence, NMS_THRESHOLD, nms_result);
 
-		// 5. Draw Results
+		// --- 2. ส่วนการวาด (วาดลงบน frameForDisplay ที่คนมองเห็น) ---
 		for (int idx : nms_result) {
 			cv::Rect box = boxes[idx];
-			cv::rectangle(frame, box, cv::Scalar(0, 255, 0), 2); // สีเขียว
+			// วาดกล่องสีเขียวสว่าง
+			cv::rectangle(frameForDisplay, box, cv::Scalar(0, 255, 0), 2);
 
 			std::string label = "Helmet: " + std::to_string((int)(confidences[idx] * 100)) + "%";
-			cv::putText(frame, label, cv::Point(box.x, box.y - 10), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+			cv::putText(frameForDisplay, label, cv::Point(box.x, box.y - 10),
+				cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+		}
+		// ... หลังจบลูปวาดกล่อง ...
+		currentBoxes->clear();
+		currentConfidences->clear();
+
+		for (int idx : nms_result) {
+			currentBoxes->push_back(boxes[idx]);
+			currentConfidences->push_back(confidences[idx]);
 		}
 	}
 
@@ -248,23 +282,66 @@ namespace helmetdetect {
 			*capture >> frame;
 
 			if (!frame.empty()) {
+				cv::flip(frame, frame, 1); // Mirror
+				*currentMatForCapture = frame.clone(); // เก็บภาพ Raw ไว้สำหรับดูสี
 
-				// 🔥 แทรกตรงนี้: ส่งภาพไปให้ AI ตรวจจับก่อนแสดงผล
-				DetectAndDraw(frame);
+				// 1. เตรียมภาพสำหรับ AI (frameForAI)
+				cv::Mat frameForAI;
 
-				// Convert Mat to Bitmap
+				if (isNight || isNightGreen) {
+					// ถ้าเปิดโหมดกลางคืน (ไม่ว่าจะขาวดำหรือเขียว) ให้ดึงแสงด้วย CLAHE ก่อนส่งให้ AI
+					cv::Mat gray, enhanced;
+					cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+					cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(currentClipLimit, cv::Size(8, 8));
+					clahe->apply(gray, enhanced);
+
+					if (currentClipLimit > 4.0) {
+						cv::GaussianBlur(enhanced, enhanced, cv::Size(3, 3), 0);
+					}
+					// แปลงเป็น 3 ช่องสีเพื่อให้ AI ประมวลผลได้
+					cv::cvtColor(enhanced, frameForAI, cv::COLOR_GRAY2BGR);
+				}
+				else {
+					// ถ้าโหมดปกติ ก็ส่งภาพสีต้นฉบับให้ AI เลย
+					frameForAI = frame.clone();
+				}
+
+				// 2. เตรียมภาพสำหรับคนดู (แต่งภาพ frame ต่อจากภาพที่ดึงแสงแล้ว)
+				if (isNight) {
+					// ถ้าเป็นโหมดขาวดำ ภาพมันเหมือน frameForAI อยู่แล้ว แค่ copy มา
+					frame = frameForAI.clone();
+				}
+				else if (isNightGreen) {
+					// ถ้าเป็นโหมดเขียว เอาภาพที่ดึงแสงแล้วมา "ใส่ Noise" และ "ย้อมเขียว"
+					cv::Mat enhanced;
+					cv::cvtColor(frameForAI, enhanced, cv::COLOR_BGR2GRAY);
+
+					// --- ใส่ Noise แค่ในขั้นตอนนี้ (AI จะไม่เห็นเม็ดทรายพวกนี้) ---
+					cv::Mat noise(enhanced.size(), CV_16SC1);
+					cv::randn(noise, 0, 25);
+					cv::Mat noisyEnhanced;
+					enhanced.convertTo(noisyEnhanced, CV_16SC1);
+					cv::add(noisyEnhanced, noise, noisyEnhanced);
+					noisyEnhanced.convertTo(enhanced, CV_8UC1);
+
+					// ย้อมสีเขียว
+					cv::Mat bgrChannels[3];
+					bgrChannels[0] = enhanced * 0.1;  // Blue
+					bgrChannels[1] = enhanced;        // Green
+					bgrChannels[2] = enhanced * 0.05; // Red
+					cv::merge(bgrChannels, 3, frame);
+					frame.convertTo(frame, -1, 1.2, 10);
+				}
+
+				*currentMatForCapture = frame.clone();
+				// 3. ตรวจจับ (ส่ง frameForAI ไปตรวจ แต่ให้วาดกล่องลงบน frame)
+				DetectAndDraw(frameForAI, frame);
+
+				// 4. แสดงผล Bitmap ตามปกติ
 				Bitmap^ bmp = MatToBitmap(frame);
-
-				// Store current frame
-				if (currentFrame != nullptr) {
-					delete currentFrame;
-				}
+				if (currentFrame != nullptr) delete currentFrame;
 				currentFrame = safe_cast<Bitmap^>(bmp->Clone());
-
-				// Display in PictureBox
-				if (pictureBox1->Image != nullptr) {
-					delete pictureBox1->Image;
-				}
+				if (pictureBox1->Image != nullptr) delete pictureBox1->Image;
 				pictureBox1->Image = bmp;
 			}
 		}
@@ -309,5 +386,9 @@ namespace helmetdetect {
 	}
 	private: System::Void cameraForm_Load(System::Object^ sender, System::EventArgs^ e) {
 	}
+
+	private: System::Void pictureBox1_Click(System::Object^ sender, System::EventArgs^ e) {
+	}
 	};
 }
+
