@@ -51,7 +51,8 @@ namespace helmetdetect {
 
 				// ส่วนที่เหลือเหมือนเดิม
 				System::Diagnostics::Debug::WriteLine("ROI Size: " + roi.cols + "x" + roi.rows);
-
+				cv::Scalar avg = cv::mean(roi);
+				System::Diagnostics::Debug::WriteLine("Average BGR: B=" + avg[0] + " G=" + avg[1] + " R=" + avg[2]);
 				std::string color = GetHelmetColor(roi);
 
 				MessageBox::Show("Helmet #" + (i + 1) +
