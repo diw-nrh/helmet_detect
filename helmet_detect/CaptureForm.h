@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <opencv2/opencv.hpp>
 #include <vector>
@@ -135,27 +135,27 @@ namespace helmetdetect {
 #pragma endregion
 
         // ===== logic methods =====
-    private:
-        std::string GetHelmetColor(cv::Mat helmetRoi)
-        {
-            if (helmetRoi.empty()) return "Other";
+private:
+    std::string GetHelmetColor(cv::Mat helmetRoi)
+    {
+        if (helmetRoi.empty()) return "Other";
 
-            int topHeight = (int)(helmetRoi.rows * 0.4);
-            if (topHeight <= 0) topHeight = helmetRoi.rows;
-            cv::Mat helmetOnly = helmetRoi(cv::Rect(0, 0, helmetRoi.cols, topHeight));
+        int topHeight = (int)(helmetRoi.rows * 0.4);
+        if (topHeight <= 0) topHeight = helmetRoi.rows;
+        cv::Mat helmetOnly = helmetRoi(cv::Rect(0, 0, helmetRoi.cols, topHeight));
 
-            cv::Scalar avgColor = cv::mean(helmetOnly);
-            double b = avgColor[0];
-            double g = avgColor[1];
-            double r = avgColor[2];
+        cv::Scalar avgColor = cv::mean(helmetOnly);
+        double b = avgColor[0];
+        double g = avgColor[1];
+        double r = avgColor[2];
 
-            if (r < 95 && g < 95 && b < 95) return "Black";
-            if (r > 130 && g > 130 && b > 130 && abs(r - g) < 25) return "White";
-            if (r > 120 && r > g + 45 && r > b + 45) return "Red";
-            if (b > 120 && b > r + 45 && b > g + 45) return "Blue";
+        if (r < 110 && g < 110 && b < 110) return "Black";
+        if (r > 130 && g > 130 && b > 130 && abs(r - g) < 25) return "White";
+        if (r > 120 && r > g + 45 && r > b + 45) return "Red";
+        if (b > 120 && b > r + 45 && b > g + 45) return "Blue";
 
-            return "Other";
-        }
+        return "Other";
+    }
 
     private: System::Void btnSnapshot_Click(System::Object^ sender, System::EventArgs^ e);
 
