@@ -84,6 +84,9 @@ namespace MyFormApp {
 		{
 			InitializeComponent();
 		}
+	private: System::Windows::Forms::BindingSource^ bindingSource1;
+	private: System::Windows::Forms::FlowLayoutPanel^ flowLayoutPanel1;
+	public:
 
 	private:
 		// เก็บตัวแปรไว้ที่นี่เพื่อให้เข้าถึงได้จากทุก Event ใน MyForm
@@ -104,15 +107,12 @@ namespace MyFormApp {
 	private: System::Windows::Forms::Timer^ timer1;
 	private: System::Windows::Forms::TrackBar^ nightTrack;
 	private: System::Windows::Forms::TrackBar^ aiTrack;
-
-
-
+	private: System::Windows::Forms::Label^ labelNightBrightness;
+	private: System::Windows::Forms::Label^ labelAIConfidence;
 	private: System::Windows::Forms::Button^ blacknightvision;
 	private: System::Windows::Forms::Button^ greennightvision;
 	private: bool isNight = false;
 	private: bool isNightGreen = false;
-
-
 
 	private: System::ComponentModel::IContainer^ components;
 
@@ -124,15 +124,20 @@ namespace MyFormApp {
 			   this->timer1 = (gcnew System::Windows::Forms::Timer(this->components));
 			   this->nightTrack = (gcnew System::Windows::Forms::TrackBar());
 			   this->aiTrack = (gcnew System::Windows::Forms::TrackBar());
+			   this->labelNightBrightness = (gcnew System::Windows::Forms::Label());
+			   this->labelAIConfidence = (gcnew System::Windows::Forms::Label());
 			   this->blacknightvision = (gcnew System::Windows::Forms::Button());
 			   this->greennightvision = (gcnew System::Windows::Forms::Button());
+			   this->bindingSource1 = (gcnew System::Windows::Forms::BindingSource(this->components));
+			   this->flowLayoutPanel1 = (gcnew System::Windows::Forms::FlowLayoutPanel());
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->nightTrack))->BeginInit();
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->aiTrack))->BeginInit();
+			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->bindingSource1))->BeginInit();
 			   this->SuspendLayout();
 			   // 
 			   // btnOpenCamera
 			   // 
-			   this->btnOpenCamera->Location = System::Drawing::Point(103, 42);
+			   this->btnOpenCamera->Location = System::Drawing::Point(103, 12);
 			   this->btnOpenCamera->Name = L"btnOpenCamera";
 			   this->btnOpenCamera->Size = System::Drawing::Size(159, 35);
 			   this->btnOpenCamera->TabIndex = 0;
@@ -142,28 +147,46 @@ namespace MyFormApp {
 			   // 
 			   // nightTrack
 			   // 
-			   this->nightTrack->Location = System::Drawing::Point(56, 271);
+			   this->nightTrack->Location = System::Drawing::Point(56, 280);
 			   this->nightTrack->Minimum = 1;
 			   this->nightTrack->Name = L"nightTrack";
 			   this->nightTrack->Size = System::Drawing::Size(259, 56);
 			   this->nightTrack->TabIndex = 1;
-			   this->nightTrack->Value = 1;
+			   this->nightTrack->Value = 4;
 			   this->nightTrack->Scroll += gcnew System::EventHandler(this, &MyForm::trackBar1_Scroll_1);
 			   // 
 			   // aiTrack
 			   // 
-			   this->aiTrack->Location = System::Drawing::Point(56, 83);
+			   this->aiTrack->Location = System::Drawing::Point(56, 92);
 			   this->aiTrack->Maximum = 100;
 			   this->aiTrack->Minimum = 1;
 			   this->aiTrack->Name = L"aiTrack";
 			   this->aiTrack->Size = System::Drawing::Size(259, 56);
 			   this->aiTrack->TabIndex = 2;
-			   this->aiTrack->Value = 1;
+			   this->aiTrack->Value = 50;
 			   this->aiTrack->Scroll += gcnew System::EventHandler(this, &MyForm::aiTrack_Scroll);
+			   // 
+			   // labelNightBrightness
+			   // 
+			   this->labelNightBrightness->AutoSize = true;
+			   this->labelNightBrightness->Location = System::Drawing::Point(100, 260);
+			   this->labelNightBrightness->Name = L"labelNightBrightness";
+			   this->labelNightBrightness->Size = System::Drawing::Size(117, 16);
+			   this->labelNightBrightness->TabIndex = 5;
+			   this->labelNightBrightness->Text = L"Night Brightness: 4";
+			   // 
+			   // labelAIConfidence
+			   // 
+			   this->labelAIConfidence->AutoSize = true;
+			   this->labelAIConfidence->Location = System::Drawing::Point(100, 70);
+			   this->labelAIConfidence->Name = L"labelAIConfidence";
+			   this->labelAIConfidence->Size = System::Drawing::Size(122, 16);
+			   this->labelAIConfidence->TabIndex = 6;
+			   this->labelAIConfidence->Text = L"AI Confidence: 50%";
 			   // 
 			   // blacknightvision
 			   // 
-			   this->blacknightvision->Location = System::Drawing::Point(103, 181);
+			   this->blacknightvision->Location = System::Drawing::Point(103, 160);
 			   this->blacknightvision->Name = L"blacknightvision";
 			   this->blacknightvision->Size = System::Drawing::Size(159, 39);
 			   this->blacknightvision->TabIndex = 3;
@@ -173,7 +196,7 @@ namespace MyFormApp {
 			   // 
 			   // greennightvision
 			   // 
-			   this->greennightvision->Location = System::Drawing::Point(103, 226);
+			   this->greennightvision->Location = System::Drawing::Point(103, 205);
 			   this->greennightvision->Name = L"greennightvision";
 			   this->greennightvision->Size = System::Drawing::Size(159, 39);
 			   this->greennightvision->TabIndex = 4;
@@ -181,11 +204,21 @@ namespace MyFormApp {
 			   this->greennightvision->UseVisualStyleBackColor = true;
 			   this->greennightvision->Click += gcnew System::EventHandler(this, &MyForm::greennightvision_Click);
 			   // 
+			   // flowLayoutPanel1
+			   // 
+			   this->flowLayoutPanel1->Location = System::Drawing::Point(328, 237);
+			   this->flowLayoutPanel1->Name = L"flowLayoutPanel1";
+			   this->flowLayoutPanel1->Size = System::Drawing::Size(200, 100);
+			   this->flowLayoutPanel1->TabIndex = 7;
+			   // 
 			   // MyForm
 			   // 
 			   this->AutoScaleDimensions = System::Drawing::SizeF(8, 16);
 			   this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			   this->ClientSize = System::Drawing::Size(368, 349);
+			   this->Controls->Add(this->flowLayoutPanel1);
+			   this->Controls->Add(this->labelAIConfidence);
+			   this->Controls->Add(this->labelNightBrightness);
 			   this->Controls->Add(this->greennightvision);
 			   this->Controls->Add(this->blacknightvision);
 			   this->Controls->Add(this->aiTrack);
@@ -196,6 +229,7 @@ namespace MyFormApp {
 			   this->Load += gcnew System::EventHandler(this, &MyForm::MyForm_Load);
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->nightTrack))->EndInit();
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->aiTrack))->EndInit();
+			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->bindingSource1))->EndInit();
 			   this->ResumeLayout(false);
 			   this->PerformLayout();
 
@@ -204,6 +238,9 @@ namespace MyFormApp {
 		   double currentClipLimit = 4.0; // ค่าเริ่มต้น
 #pragma endregion
 	private: System::Void MyForm_Load(System::Object^ sender, System::EventArgs^ e) {
+		// ตั้งค่าเริ่มต้นของ Label
+		labelNightBrightness->Text = "Night Brightness: " + nightTrack->Value.ToString();
+		labelAIConfidence->Text = "AI Confidence: " + aiTrack->Value.ToString() + "%";
 	}
 	private: System::Void btnOpenCamera_Click(System::Object^ sender, System::EventArgs^ e) {
 		try {
@@ -217,6 +254,7 @@ namespace MyFormApp {
 			activeCamForm->isNight = this->isNight;
 			activeCamForm->isNightGreen = this->isNightGreen;
 			activeCamForm->currentClipLimit = this->currentClipLimit;
+			activeCamForm->aiConfidence = (float)aiTrack->Value / 100.0f;
 
 			activeCamForm->Show();
 			captureForm->Show();
@@ -234,10 +272,10 @@ namespace MyFormApp {
 		if (isNight) {
 			blacknightvision->Text = "Color";
 			isNightGreen = false;
-			greennightvision->Text = "NightGreen"; // Reset อีกปุ่ม
+			greennightvision->Text = "G_Night"; // Reset อีกปุ่ม
 		}
 		else {
-			blacknightvision->Text = "Night";
+			blacknightvision->Text = "B_Night";
 		}
 
 		// 🔥 ส่งค่าไปยัง cameraForm ที่เปิดอยู่
@@ -252,10 +290,10 @@ namespace MyFormApp {
 		if (isNightGreen) {
 			greennightvision->Text = "Color";
 			isNight = false;
-			blacknightvision->Text = "Night"; // Reset อีกปุ่ม
+			blacknightvision->Text = "B_Night"; // Reset อีกปุ่ม
 		}
 		else {
-			greennightvision->Text = "NightGreen";
+			greennightvision->Text = "G_Night";
 		}
 
 		// 🔥 ส่งค่าไปยัง cameraForm ที่เปิดอยู่
@@ -268,8 +306,8 @@ namespace MyFormApp {
 		// เราต้องแปลงเป็น double เพราะ createCLAHE รับค่า double
 		currentClipLimit = (double)nightTrack->Value;
 
-		// (Optional) ถ้าอยากให้โชว์ตัวเลขว่าปรับไปเท่าไหร่แล้ว ให้ใส่ Label เพิ่ม
-		// labelBrightness->Text = "Brightness: " + currentClipLimit.ToString();
+		// อัพเดท Label
+		labelNightBrightness->Text = "Night Brightness: " + nightTrack->Value.ToString();
 
 		// 🔥 ส่งค่าไปยัง cameraForm ที่เปิดอยู่
 		if (activeCamForm != nullptr && !activeCamForm->IsDisposed) {
@@ -278,6 +316,9 @@ namespace MyFormApp {
 	}
 	private: System::Void aiTrack_Scroll(System::Object^ sender, System::EventArgs^ e) {
 		float threshold = (float)aiTrack->Value / 100.0f; // แปลง 1-100 เป็น 0.01 - 1.0
+
+		// อัพเดท Label
+		labelAIConfidence->Text = "AI Confidence: " + aiTrack->Value.ToString() + "%";
 
 		// ส่งค่าไปที่หน้ากล้อง
 		if (activeCamForm != nullptr && !activeCamForm->IsDisposed) {
