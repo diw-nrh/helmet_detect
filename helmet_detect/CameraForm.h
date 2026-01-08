@@ -391,4 +391,3 @@ namespace helmetdetect {
 	}
 	};
 }
-
